@@ -4,14 +4,12 @@
 #include <string>
 #include <cstdlib>
 #include <mutex>
+#include <shared_mutex>
 using namespace std;
 
 
 #define MAX_LEVEL 17  // ×î¸ßMAX_LEVEL²ã
 #define SAVE_PATH "D:\\file.txt"
-
-mutex mtx;
-
 
 template<class K, class V>
 struct Node {
@@ -63,6 +61,7 @@ private:
 	int SkipListLevel;
 	int nodeCount;
 	int getRandomLevel();
+	mutable shared_mutex mtx;
 public:
 	SkipList();
 	~SkipList();
@@ -107,12 +106,11 @@ SkipList<K, V>::~SkipList() {
 
 template<class K, class V>
 bool SkipList<K, V>::insert(const K& key, const V& value) {
-	mtx.lock();
-
 	Node<K, V>* cur = this->head;
 	Node<K, V>** prePtr = new Node<K, V>* [MAX_LEVEL + 1];
 	memset(prePtr, NULL, (MAX_LEVEL + 1) * sizeof(Node<K, V>*));
 
+	unique_lock<shared_mutex> lk(mtx);
 	for (int i = SkipListLevel; i >= 0; i--) {
 		while (cur->next[i] && cur->next[i]->getKey() < key) {
 			cur = cur->next[i];
@@ -123,7 +121,6 @@ bool SkipList<K, V>::insert(const K& key, const V& value) {
 	cur = cur->next[0];
 	if (cur && cur->getKey() == key) {
 		cout << key << " is exist:" << key << " : " << cur->getValue() << endl;
-		mtx.unlock();
 		return false;
 	}
 
@@ -142,7 +139,6 @@ bool SkipList<K, V>::insert(const K& key, const V& value) {
 	}
 
 	nodeCount++;
-	mtx.unlock();
 
 	cout << key << " : " << value << " insert success" << endl;
 
@@ -152,6 +148,7 @@ bool SkipList<K, V>::insert(const K& key, const V& value) {
 template<class K, class V>
 pair<bool, V> SkipList<K, V>::search(const K& key) const {
 	Node<K, V>* cur = this->head;
+	shared_lock<shared_mutex> lk(mtx);
 	for (int i = SkipListLevel; i >= 0; i--) {
 		while (cur->next[i] && cur->next[i]->getKey() < key)
 			cur = cur->next[i];
@@ -175,10 +172,11 @@ void SkipList<K, V>::delete_elem(const K& key) {
 		return;
 	}
 
-	mtx.lock();
 	Node<K, V>* cur = this->head;
 	Node<K, V>** prePtr = new Node<K, V>* [SkipListLevel + 1];
 	memset(prePtr, NULL, (SkipListLevel + 1) * sizeof(Node<K, V>*));
+
+	unique_lock<shared_mutex> lk(mtx);
 
 	for (int i = SkipListLevel; i >= 0; i--) {
 		while (cur->next[i] && cur->next[i]->getKey() < key)
@@ -201,15 +199,16 @@ void SkipList<K, V>::delete_elem(const K& key) {
 
 	delete cur;
 	nodeCount--;
-	mtx.unlock();
 
 	cout << key << " : " << res.second << " delete success" << endl;
 }
 
 template<class K, class V>
 bool SkipList<K, V>::update(const K& key, const V& value) {
-	mtx.lock();
 	Node<K, V>* cur = this->head;
+
+	unique_lock<shared_mutex> lk(mtx);
+
 	for (int i = SkipListLevel; i >= 0; i--) {
 		while (cur->next[i] && cur->next[i]->getKey() < key)
 			cur = cur->next[i];
@@ -217,11 +216,9 @@ bool SkipList<K, V>::update(const K& key, const V& value) {
 		if (cur->next[i] && cur->next[i]->getKey() == key) {
 			cur->next[i]->setValue(value);
 			cout << key << " : " << value << " update success" << endl;
-			mtx.unlock();
 			return true;
 		}
 	}
-	mtx.unlock();
 	cout << key << " not found" << endl;
 	cout << key << " update failed" << endl;
 	return false;
